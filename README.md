@@ -20,6 +20,6 @@ The main goals of this project are to provide updated tools for locating differe
 4. Create output usable in GIS.
 
 ## Datasets
-Sentinel-2 imagery is used.
+Sentinel-2 imagery from the Copernicus Data Space Ecosystem (https://dataspace.copernicus.eu/).
 
 ## References
