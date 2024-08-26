@@ -14,10 +14,10 @@ Detecting marine objects is useful for a variety of applications. This project i
 
 ## Goals
 The main goals of this project are to provide updated tools for locating different types of objects on the surface of the sea. This involves a few key steps:
-1. Acquiring satellite imagery via Python.
-2. Applying object detection indices (e.g., NDVI, FDI).
-3. Classification of marine objects using machine learning techniques.
-4. Visualisation of objects.
+1. Acquiring satellite imagery at a user defined location for a specific time.
+2. Applying object detection indices (e.g., NDVI, FDI) to identify objects in the water.
+3. Produce summary statistics for object coverage and type.
+4. Create output usable in GIS.
 
 ## Datasets
 Sentinel-2 imagery is used.
