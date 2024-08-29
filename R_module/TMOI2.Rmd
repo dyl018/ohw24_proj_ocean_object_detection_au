@@ -1,0 +1,209 @@
+---
+title: "Ocean Object Detection"
+output: html_document
+date: "2024-08-29"
+---
+
+# Module 1: ROI Definition and Imagery Acquisition
+Define the region of interest (ROI), setup data access to Copernicus, and download the relevant imagery.
+Package installation requirements:
+1. rstac <- Client library for spatio-temporal asset catalog
+2. sf <- simple features for R
+3. stars <- spatio-temporal arrays, raster, and vector data cubes
+4. terra <- Spatial data analysis
+5. abind <- Combine multidimensional arrays
+6. sp <- Classes and methods for spatial data
+
+### Install packages
+```{r}
+install.packages ("rstac")
+install.packages ("sf")
+install.packages ("stars")
+install.packages ("terra")
+install.packages ("abind")
+install.packages ("sp")
+```
+
+### Load libraries 
+```{r}
+library(rstac)
+library(sf)
+library(stars)
+library(terra) 
+library(sp)
+library(abind)
+```
+
+## User Input
+Define the key inputs for the module here:
+1. Region of interest (ROI) by defining minimum/maximum decimal latitude/longitude.
+2. Start and end time in the format: yyyy-mm-dd
+3. Data output location.
+
+### Define AOI
+```{r}
+bbox <- st_bbox(c(xmin=-0.4005585, ymin=5.422245, 
+                 xmax=-0.1936628, ymax=5.544341),
+                 crs=4326)
+```
+
+### Define start and end date of data acqusition
+```{r}
+start_date <- "2018-10-31" 
+end_date <- "2018-11-01"
+```
+
+
+### Access the Sentinel-2 Database
+```{r}
+url_dataspace <-"https://planetarycomputer.microsoft.com/api/stac/v1/"
+level = "sentinel-2-l2a"
+```
+
+
+### The query command to obtain the data
+```{r}
+matches <- 
+  stac(url_dataspace) |>
+  stac_search(collections = level,
+              bbox = bbox,
+              datetime = "2018-10-31/2018-11-01") |>
+  get_request() |>
+  items_sign(sign_fn = sign_planetary_computer())
+best_img <- matches$features[[1]]
+```
+
+### AOI to crop the imagery
+```{r}
+red <- read_stars( paste0("/vsicurl/", best_img$assets$B04$href) )
+bbox_proj <- bbox |> st_as_sfc() |> st_transform(st_crs(red)) |> vect()
+```
+
+
+### Download Image at ROI
+```{r}
+Blue <- rast( paste0("/vsicurl/", best_img$assets$B02$href) )|> crop(bbox_proj)
+Green <- rast( paste0("/vsicurl/", best_img$assets$B03$href) )|> crop(bbox_proj)
+Red <- rast( paste0("/vsicurl/", best_img$assets$B04$href) )|> crop(bbox_proj)
+Rededge <- rast( paste0("/vsicurl/", best_img$assets$B06$href) )|> crop(bbox_proj)
+NIR  <- rast( paste0("/vsicurl/", best_img$assets$B08$href) )|> crop(bbox_proj)
+SWIR <- rast( paste0("/vsicurl/", best_img$assets$B11$href) )|> crop(bbox_proj)
+```
+
+
+### Resample Rededge2 and SWIR 2 from 20m to 10m**
+```{r}
+Rededge2 <- resample(Rededge, NIR, method='bilinear')
+SWIR2 <- resample(SWIR, NIR, method='bilinear')
+```
+
+### Display True Colour Image at ROI
+The true colour image that covers the ROI is displayed here, for Sentinel-2 level 2A data.
+
+```{r}
+raster_stack <- c(Red, Green, Blue)
+raster_stack_all <- c(Blue, Green, Red, Rededge2, NIR, SWIR2)
+plotRGB(raster_stack, scale = 1, stretch = "lin")
+```
+
+### Save Dataset
+Save the multispectral Sentinel-2 data as a GeoTIFF
+
+```{r}
+writeRaster(raster_stack_all, "./Accra.tif", overwrite=TRUE)
+```
+
+# Module 2: Read Data and Detect Objects
+Read GeoTIFF data and perform object detection using K-Means clustering.
+
+### K-Means Clustering (NDVI)
+```{r}
+#NDVI
+NDVI <-(NIR-Red)/(NIR+Red)
+NDVI  |> plot()
+
+#Classification
+nr <- as.data.frame(NDVI, cell=TRUE)
+set.seed(99)
+kmncluster <- kmeans(nr[,-1], centers=2, iter.max = 500, nstart = 3, algorithm="Lloyd")
+MOI_NDVI <- NDVI
+MOI_NDVI[] <- kmncluster$cluster
+plot(MOI_NDVI, main = 'Unsupervised classification of NDVI')
+```
+
+### K-Means Clustering (FDI)
+```{r}
+#FDI
+FDI <- NIR-(Rededge2+(SWIR2-Rededge2)*((842-665)/(1610-665))*10)
+FDI  |> plot()
+
+#Classification
+nr <- as.data.frame(FDI, cell=TRUE)
+set.seed(99)
+kmncluster <- kmeans(nr[,-1], centers=3, iter.max = 500, nstart = 3, algorithm="Lloyd")
+MOI_FDI <- FDI
+MOI_FDI[] <- kmncluster$cluster
+plot(MOI_FDI, main = 'Unsupervised classification of FDI')
+```
+
+### Masking Land
+```{r}
+sf_object <- st_read("Sea_accra.shp")
+spat_vector <- vect(sf_object)
+shapefile_reprojected <- project(spat_vector, "EPSG:32630")
+ 
+#check raster and vector is overlay
+plot(NDVI)
+plot(shapefile_reprojected, add = TRUE, border = "blue", lwd = 2)
+ 
+#masking NDVI
+mask_NDVI<- crop(MOI_NDVI, shapefile_reprojected)
+mask_MOI_NDVI<- mask(mask_NDVI, shapefile_reprojected)
+plot(mask_MOI_NDVI)
+
+#masking FDI
+mask_FDI<- crop(MOI_FDI, shapefile_reprojected)
+mask_MOI_FDI<- mask(mask_FDI, shapefile_reprojected)
+plot(mask_MOI_FDI)
+```
+
+# Module 3: Visualitation & Create Shapefile from Classified Areas
+
+Export classified areas as shapefiles.
+
+### Oil Spill Map based on NDVI
+```{r}
+plot(mask_MOI_NDVI, main = 'Oil Spill (NDVI) Map', legend = F,
+     col = c('red', 'white'),
+     )
+legend('left', legend = c('Non oil spill', 'Oil spill'),
+       fill = c('red', 'white'),
+       border = FALSE,
+       bty = 'n',
+       xpd = T,horiz = F,
+       inset = c(0.99, 1))
+writeRaster(mask_MOI_NDVI, "./MOI_NDVI.tif", overwrite=TRUE)
+```
+### Oil Spill Map based on FDI
+```{r}
+plot(mask_MOI_FDI, main = 'Oil Spill (FDI) Map ', legend = F,
+     col = c('white','red', 'white'),
+     )
+legend('left', legend = c( 'Land','Oil spill','Non oil spill'),
+       fill = c('white','red', 'white'),
+       border = FALSE,
+       bty = 'n',
+       xpd = T,horiz = F,
+       inset = c(0.99, 1))
+writeRaster(mask_MOI_FDI, "./MOI_FDI.tif", overwrite=TRUE)
+```
+### Convert raster to polygon
+```{r}
+#NDVI
+polygon_Oilspill_NDVI <- as.polygons(mask_MOI_NDVI, dissolve = TRUE)
+plot(polygon_Oilspill_NDVI, main = "Raster to Polygon (NDVI)")
+
+#FDI
+polygon_Oilspill_FDI <- as.polygons(mask_MOI_FDI, dissolve = TRUE)
+plot(polygon_Oilspill_FDI, main = "Raster to Polygon (FDI)")
+```
