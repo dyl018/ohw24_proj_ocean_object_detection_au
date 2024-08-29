@@ -10,7 +10,7 @@ Create some user friendly, modular tools in both Python and R to detect what's o
 Cowley, D., Ginting, D.
 
 ## Background
-Detecting marine objects is useful for a variety of applications. This project is attempting to identify these objects at a selected location and produce usable output for further analysis, utilising a combination of existing tools and packages for multiple programming languages.
+Detecting marine objects is useful for a variety of applications and there are many tools. This project is attempting to identify these objects at a selected location and produce usable output for further analysis, utilising a combination of existing tools and packages for multiple programming languages.
 
 ## Goals
 The main goals of this project are to provide updated tools for locating different types of objects on the surface of the sea. This involves a few key steps:
