@@ -15,7 +15,7 @@ Detecting marine objects is useful for a variety of applications and there are m
 ## Goals
 The main goals of this project are to provide updated tools for locating different types of objects on the surface of the sea. This involves a few key steps:
 1. Acquiring satellite imagery at a user defined location for a specific time.
-2. Applying object detection indices (e.g., NDVI, FDI) to identify objects in the water.
+2. Applying object detection indices (e.g., NDVI, FDI) and unsupervised classification to identify objects in the water.
 3. Produce summary statistics for object coverage and type.
 4. Create output usable in GIS.
 
